@@ -27,7 +27,7 @@ function orvibo_proto.dissector(buffer,pinfo,tree)
       end
 end
 
-function Strip_Control_and_Extended_Codes( str )
+function trim(str)
     local s = ""
     for i = 1, str:len() do
 	if str:byte(i) >= 32 and str:byte(i) <= 126 then
