@@ -5,12 +5,7 @@ config = require "config"
 local cipher = gcrypt.Cipher(gcrypt.CIPHER_AES128, gcrypt.CIPHER_MODE_ECB)
 cipher:setkey(key)
 
-
-
--- trivial protocol example
--- declare our protocol
 orvibo_proto = Proto("orvibo","Orvibo Protocol")
--- create a function to dissect it
 function orvibo_proto.dissector(buffer,pinfo,tree)
       pinfo.cols.protocol = "UDP"
       if buffer(0,2):string() == "hd" and buffer(4,2):string() == "pk" then
@@ -19,24 +14,21 @@ function orvibo_proto.dissector(buffer,pinfo,tree)
         subtree:add(buffer(4, 2), "Packet Type: " .. buffer(4, 2):string())
         subtree:add(buffer(6, 4), "CRC Checksum: " .. buffer(6,4))
         -- Trim the payload
-        payload = payload:gsub("^%s+", ""):gsub("%s+$", "")
-        res = json.decode(trim(cipher:decrypt(payload)))
-
-        subtree:add("Decrypted payload: " .. res)
+        payload = cipher:decrypt(payload:gsub("^%s+", ""):gsub("%s+$", ""))
+        res = json.decode(payload:gsub("^%s+", ""):gsub("%s+$", ""))
+        subtree = subtree:add("Payload Contents:")
+        for key, value in pairs(res) do
+          subtree:add(key .. ": " .. value)
+        end
 
       end
 end
 
-function trim(str)
-    local s = ""
-    for i = 1, str:len() do
-	if str:byte(i) >= 32 and str:byte(i) <= 126 then
-  	    s = s .. str:sub(i,i)
-	end
-    end
-    return s
-end
--- load the udp.port table
+-- load the udp.port table, and tcp.port table
 udp_table = DissectorTable.get("udp.port")
--- register our protocol to handle udp port 10000
-udp_table:add(10000,orvibo_proto)
+tcp_table = DissectorTable.get("tcp.port")
+
+for key, value in pairs(ports) do
+  udp_table:add(value, orvibo_proto)
+  tcp_table:add(value ,orvibo_proto)
+end
