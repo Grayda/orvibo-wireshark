@@ -1,5 +1,7 @@
 -- Place your key here
-key = "yourkeygoeshere1"
+pkKey = "yourkeygoeshere1"
+dkKey = "yourkeygoeshere2"
+
 -- Ports to register with Wireshark
 ports = {
   8295,
