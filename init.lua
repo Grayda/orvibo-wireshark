@@ -19,12 +19,22 @@ function orvibo_proto.dissector(buffer,pinfo,tree)
         subtree:add(buffer(4, 2), "Packet Type: " .. buffer(4, 2):string())
         subtree:add(buffer(6, 4), "CRC Checksum: " .. buffer(6,4))
         -- Trim the payload
-        payload = payload:gsub("^%s+", ""):gsub("%s+$", "")
+        payload = trim(payload:gsub("^%s+", ""):gsub("%s+$", ""))
         res = json.decode(cipher:decrypt(payload))
 
         subtree:add("Decrypted payload: " .. res)
 
       end
+end
+
+function Strip_Control_and_Extended_Codes( str )
+    local s = ""
+    for i = 1, str:len() do
+	if str:byte(i) >= 32 and str:byte(i) <= 126 then
+  	    s = s .. str:sub(i,i)
+	end
+    end
+    return s
 end
 -- load the udp.port table
 udp_table = DissectorTable.get("udp.port")
