@@ -16,6 +16,10 @@ This dissector relies on luagcrypt, which in turn relies on libgcrypt. See https
 You can use LuaRocks to build this on Windows, but this hasn't been tested
 
 ## Using This Dissector
+Create a file called `config.lua` in this directory. Create a local variable called `key`:
+
+    local key = "yourkeygoeshere1"
+
 When an Orvibo packet is found, it'll appear in the Packet Detail window, under "Orvibo PK Packet". Right now it shows packet type, CRC checksum and the decrypted payload
 
 ## Acknowledgement
