@@ -11,15 +11,12 @@ This dissector relies on luagcrypt, which in turn relies on libgcrypt. See https
 - Run `make` from the `luagcrypt` directory
 - Copy `luagcrypt.so` out of the directory and into this directory
 - Copy this whole folder (`luagcrypt.so` and `init.lua` to) `~/.wireshark/plugins` (make the `plugins` folder if necessary)
+- Rename `config.sample.lua` to `config.lua`. Change the key to the key you've obtained from the Kepler APK
 - Launch Wireshark. If you get a "module not found" error, run Wireshark from the plugin directory.
 
 You can use LuaRocks to build this on Windows, but this hasn't been tested
 
 ## Using This Dissector
-Create a file called `config.lua` in this directory. Create a local variable called `key`:
-
-    local key = "yourkeygoeshere1"
-
 When an Orvibo packet is found, it'll appear in the Packet Detail window, under "Orvibo PK Packet". Right now it shows packet type, CRC checksum and the decrypted payload
 
 ## Acknowledgement
