@@ -19,8 +19,8 @@ function orvibo_proto.dissector(buffer,pinfo,tree)
         subtree:add(buffer(4, 2), "Packet Type: " .. buffer(4, 2):string())
         subtree:add(buffer(6, 4), "CRC Checksum: " .. buffer(6,4))
         -- Trim the payload
-        payload = trim(payload:gsub("^%s+", ""):gsub("%s+$", ""))
-        res = json.decode(cipher:decrypt(payload))
+        payload = payload:gsub("^%s+", ""):gsub("%s+$", "")
+        res = json.decode(trim(cipher:decrypt(payload)))
 
         subtree:add("Decrypted payload: " .. res)
 
