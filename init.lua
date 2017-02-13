@@ -76,10 +76,15 @@ function orvibo_proto.dissector(buffer,pinfo,tree)
 
         -- Display the packet checksum
         subtree1:add(buffer(6, 4), "Checksum " .. buffer(6,4))
-        -- Grab the cmd from our JSON and set it to orvibo.cmd
-        subtree1:add(fields.cmd, jsonObj.cmd)
-        -- Grab the uid from our JSON and set it to orvibo.uid
-        subtree1:add(fields.uid, jsonObj.uid)
+        if jsonObj.cmd ~= nil then
+          -- Grab the cmd from our JSON and set it to orvibo.cmd
+          subtree1:add(fields.cmd, jsonObj.cmd)
+        end
+
+        if jsonObj.uid ~= nil then
+          -- Grab the uid from our JSON and set it to orvibo.uid
+          subtree1:add(fields.uid, jsonObj.uid)
+        end
 
         -- Add a new section to the tree
         subtree2 = subtree:add("Payload Contents:")
