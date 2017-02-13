@@ -1,69 +1,95 @@
+-- Include luagcrypt for decrypting AES
 gcrypt = require "luagcrypt"
+
+-- Include json for parsing JSON to table
 json = require "json"
+
+-- Include our config, where decryption keys are stored
 config = require "config"
 
--- AES128, ECB
-local pkCipher = gcrypt.Cipher(gcrypt.CIPHER_AES128, gcrypt.CIPHER_MODE_ECB)
-local dkCipher = gcrypt.Cipher(gcrypt.CIPHER_AES128, gcrypt.CIPHER_MODE_ECB)
-
--- Set the keys from our config.lua file
-pkCipher:setkey(pkKey)
-dkCipher:setkey(dkKey)
-
+-- Register our proto object
 orvibo_proto = Proto("orvibo","Orvibo Protocol")
+
+-- These fields allow filtering
+fields = orvibo_proto.fields
+fields.data = ProtoField.string("orvibo.data", "Data") -- The whole untouched packet
+fields.payload = ProtoField.string("orvibo.payload", "Decrypted Payload") -- The decrypted payload
+fields.pk = ProtoField.bool("orvibo.pk", "PK Packet") -- If this is a PK packet
+fields.dk = ProtoField.bool("orvibo.dk", "DK Packet") -- If this is a DK packet
+fields.cmd = ProtoField.string("orvibo.cmd", "Command") -- The command we've extracted from our packet or JSON
+fields.uid = ProtoField.string("orvibo.uid", "Unique ID") -- The command we've extracted from our packet or JSON
+
 function orvibo_proto.dissector(buffer,pinfo,tree)
-      -- This dissector applies to both UDP and TCP packets
-      pinfo.cols.protocol = "UDP" and "TCP"
-      -- If the packet contains "hd" (which is Orvibo's magic word) AND is a "pk" type Packet
-      if buffer(0,2):string() == "hd" and buffer(4,2):string() == "pk" then
-        -- Add a top-level item to our packet description pane
-        local subtree = tree:add(orvibo_proto,buffer(),"Orvibo PK packet")
-        -- Get the payload we're going to decrypt
+    -- This dissector will apply to both UDP and TCP packets
+    pinfo.cols.protocol = "UDP" and "TCP"
+
+    -- We're only concerned with packets that start with "hd", which is our Orvibo packet
+    if buffer(0,2):string() == "hd" then
+      -- Add an item to the packet information window
+      local subtree = tree:add(orvibo_proto, buffer(),"Orvibo Packet")
+
+      -- If this is a v2 packet, which is evident by the 4th byte being either "pk" or "dk""
+      if buffer(4,2):string() == "pk" or buffer(4,2):string() == "dk" then
+
+        -- Set up our ciphers
+        local pkCipher = gcrypt.Cipher(gcrypt.CIPHER_AES128, gcrypt.CIPHER_MODE_ECB)
+        local dkCipher = gcrypt.Cipher(gcrypt.CIPHER_AES128, gcrypt.CIPHER_MODE_ECB)
+
+        -- Set the keys from our config.lua file
+        pkCipher:setkey(pkKey)
+        dkCipher:setkey(dkKey)
+
+        -- Get the unencrypted payload, which starts from the 10th byte (I think)
         local payload = buffer(10, buffer:len() - 10):string()
-        -- Trim spaces from the payload
-        payload = payload:gsub("^%s+", ""):gsub("%s+$", "")
-        -- Actually decrypt the payload
-        decrypted = pkCipher:decrypt(payload)
-
-        subtree1 = subtree:add("Data:")
-        subtree1:add(buffer(), "Raw Packet: " .. buffer())
-        subtree1:add(buffer(10, buffer:len() - 10), "Encrypted Payload: " .. buffer(10, buffer:len() - 10))
-        subtree1:add(buffer(10, buffer:len() - 10), "Decrypted Payload: " .. decrypted)
-
-        subtree:add(buffer(4, 2), "Packet Type: " .. buffer(4, 2):string())
-        subtree:add(buffer(6, 4), "CRC Checksum: " .. buffer(6,4))
-        subtree:add("Trimmed Payload Length: " .. payload:len())
-
-        res = json.decode(decrypted:gsub("^%s+%x06+", ""):gsub("%s+%x06+$", ""))
-        subtree2 = subtree:add("Payload Contents:")
-        for key, value in pairs(res) do
-          subtree2:add(key .. ": " .. value)
+        -- If the packet is PK
+        if buffer(4,2):string() == "pk" then
+          -- Decrypt using the PK key, which was extracted from the Kepler APK
+          -- We want everything from the first { to the last }
+          decrypted = string.match(pkCipher:decrypt(payload), "{.*}")
+          isPK = true
+        -- If the packet is DK
+        elseif buffer(4,2):string() == "dk" then
+          -- Use the DK key. I believe this is generated server-side
+          decrypted = string.match(dkCipher:decrypt(payload), "{.*}")
+          isPK = false
         end
-      elseif buffer(0,2):string() == "hd" and buffer(4,2):string() == "dk" then
-        -- Add a top-level item to our packet description pane
-        local subtree = tree:add(orvibo_proto,buffer(),"Orvibo DK packet")
-        -- Get the payload we're going to decrypt
-        local payload = buffer(10, buffer:len() - 10):string()
-        -- Trim spaces from the payload
-        payload = payload:gsub("^%s+", ""):gsub("%s+$", "")
-        -- Actually decrypt the payload
-        decrypted = dkCipher:decrypt(payload)
 
-        subtree1 = subtree:add("Data:")
-        subtree1:add(buffer(), "Raw Packet: " .. buffer())
-        subtree1:add(buffer(10, buffer:len() - 10), "Encrypted Payload: " .. buffer(10, buffer:len() - 10))
-        subtree1:add(buffer(10, buffer:len() - 10), "Decrypted Payload: " .. decrypted)
+        -- Parse the decrypted packet as JSON
+        jsonObj = json.decode(string.match(decrypted, "{.*}"))
 
-        subtree:add(buffer(4, 2), "Packet Type: " .. buffer(4, 2):string())
-        subtree:add(buffer(6, 4), "CRC Checksum: " .. buffer(6,4))
-        subtree:add("Trimmed Payload Length: " .. payload:len())
+        -- A new section in the packet information window
+        subtree1 = subtree:add("Packet Information")
+        -- Set orvibo.data to the whole buffer
+        subtree1:add(fields.data, buffer())
+        -- Display our encrypted payload as hex
+        subtree1:add(buffer(10, buffer:len() - 10), "Encrypted Payload " .. buffer(10, buffer:len() - 10))
+        -- Set orvibo.payload to our decrypted payload. Doing this also adds it to the tree
+        subtree1:add(fields.payload, decrypted)
+        -- If we've got a PK packet
+        if isPK == true then
+          -- Same as above. Set orvibo.pk to true (needs to be an int, not a boolean for some reason)
+          subtree1:add(fields.pk, 1)
+        elseif isPK == false then
+          -- Same as above, but for DK
+          subtree1:add(fields.dk, 1)
+        end
 
-        res = json.decode(decrypted:gsub("^%s+%x06+", ""):gsub("%s+%x06+$", ""))
+        -- Display the packet checksum
+        subtree1:add(buffer(6, 4), "Checksum " .. buffer(6,4))
+        -- Grab the cmd from our JSON and set it to orvibo.cmd
+        subtree1:add(fields.cmd, jsonObj.cmd)
+        -- Grab the uid from our JSON and set it to orvibo.uid
+        subtree1:add(fields.uid, jsonObj.uid)
+
+        -- Add a new section to the tree
         subtree2 = subtree:add("Payload Contents:")
-        for key, value in pairs(res) do
+        -- Loop through all the items in the JSON table
+        for key, value in pairs(jsonObj) do
+          -- Same as above
           subtree2:add(key .. ": " .. value)
         end
       end
+    end
 end
 
 -- load the udp.port table, and tcp.port table
